@@ -429,7 +429,6 @@ footer{border-top:1px solid var(--line);padding:40px 0;}
       </div>
     </div>
     <form class="reveal" onsubmit="return sendContactForm(event)">
-      <input type="hidden" name="access_key" value="1e72698b-80ff-4a34-91ca-d0fed2bac82e">
       <input type="checkbox" name="botcheck" style="display:none" tabindex="-1" autocomplete="off">
       <div class="field"><label for="name">Name</label><input id="name" name="name" type="text" required></div>
       <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" required></div>
@@ -441,24 +440,33 @@ footer{border-top:1px solid var(--line);padding:40px 0;}
     function sendContactForm(e){
       e.preventDefault();
       var form=e.target, btn=form.querySelector('button[type="submit"]'), msg=form.querySelector('.form-msg');
+      if (btn.disabled) return false; // guard against double-submit
       var originalLabel=btn.textContent;
+      var payload = Object.fromEntries(new FormData(form));
+      console.log('[contact-form] submitting payload:', payload);
       btn.disabled=true; btn.textContent='Sending…'; msg.style.color='var(--leaf)'; msg.textContent='';
-      fetch('https://api.web3forms.com/submit', {
+      fetch('/api/contact', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify(Object.fromEntries(new FormData(form)))
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       })
-      .then(function(r){ return r.json(); })
-      .then(function(data){
-        if (data.success) {
+      .then(function(r){
+        console.log('[contact-form] HTTP status:', r.status);
+        return r.json().catch(function(){ return {}; }).then(function(data){ return { ok:r.ok, data:data }; });
+      })
+      .then(function(res){
+        console.log('[contact-form] response body:', res.data);
+        if (res.ok && res.data.success) {
           msg.textContent = "Thanks — I'll reply within a day.";
           form.reset();
         } else {
+          console.warn('[contact-form] server rejected the request:', res.data.message);
           msg.style.color = '#e05a5a';
-          msg.textContent = 'Something went wrong. Please try again or email me directly.';
+          msg.textContent = res.data.message || 'Something went wrong. Please try again or email me directly.';
         }
       })
-      .catch(function(){
+      .catch(function(err){
+        console.error('[contact-form] network error — request never reached the server:', err);
         msg.style.color = '#e05a5a';
         msg.textContent = 'Something went wrong. Please try again or email me directly.';
       })
